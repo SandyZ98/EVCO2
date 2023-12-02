@@ -21,4 +21,4 @@ This R package provides tools for estimating ventilation rates in indoor environ
 ### Installation
 ```R
 # Install the package from GitHub
-devtools::install_github("YourGitHubUsername/YourRepositoryName")
+devtools::install_github("SandyZ98/EVCO2")
