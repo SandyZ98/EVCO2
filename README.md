@@ -1,5 +1,5 @@
-## CO2-Based Ventilation Rate Estimation
-
+## CO2-Based Ventilation Rate Estimation :four_leaf_clover: :four_leaf_clover: :four_leaf_clover:
+Fall2023  Biostat 615 - Group6 
 ### Description
 This R package provides tools for estimating ventilation rates in indoor environments, crucial for understanding and mitigating airborne disease transmission risks such as COVID-19. It implements the Build-Up Method and the Transient Mass Balance Method, adapted to analyze time-series CO2 data.
 
