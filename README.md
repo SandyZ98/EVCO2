@@ -16,7 +16,8 @@ This R package provides tools for estimating ventilation rates in indoor environ
 - Simulated CO2 data generation for algorithm testing.
 - Ongoing testing and optimization.
 
-## Getting Started with CO2-Based Ventilation Rate Estimation
+### Key Reference
+Batterman S. Review and Extension of CO₂-Based Methods to Determine Ventilation Rates with Application to School Classrooms. Int J Environ Res Public Health. 2017;14(2):145. Published 2017 Feb 4. doi:10.3390/ijerph14020145
 
 ### Installation
 ```R
