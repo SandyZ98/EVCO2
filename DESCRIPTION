@@ -5,6 +5,6 @@ Version: 0.1.0
 Author: Thomas Cooper; Chendi Zhao; Abigail Mauger
 Maintainer: The package maintainer <yourself@somewhere.net>
 Description: The aim of the package is to use time series data of CO2 to calculate room ventilation rate. Our methodology will follow the “Build-Up Method” and “Transient Mass Balance Method” from Batterman[10] to estimate air exchange rates. From this air exchange rate, we can solve for the room ventilation rate. 
-License: What license is it under?
+License: Biostat 615~
 Encoding: UTF-8
 LazyData: true
