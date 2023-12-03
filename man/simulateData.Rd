@@ -1,6 +1,7 @@
 \name{simulateData}
 \alias{simulateData}
 \title{simulateData}
+
 \usage{
 simulateData()
 }
