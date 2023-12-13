@@ -8,28 +8,30 @@
 # CO2rate ug/s to Gp L/min
 #' Convert CO2 emission rates (in micrograms/s) to Gp (in L/min)
 #'
-#' @param CO2rate 
-#' @param temp 
+#' @param CO2rate
+#' @param temp
 #'
 #' @return Gp
 #' @export
 #'
 #' @examples
+#'
 CO2rate_to_Gp <- function(CO2rate, temp=25){
   return(CO2rate / 1.965 / .0046 * 60 / (8.314*(273.15+temp)/101.325) / 1000)
-  
+
 }
 
 # Gp L/min to CO2rate ug/s
 #' Convert Gp (in L/min) to CO2 emission rates (in micrograms/s)
 #'
-#' @param Gp 
-#' @param temp 
+#' @param Gp
+#' @param temp
 #'
 #' @return CO2rate
 #' @export
 #'
 #' @examples
+#'
 Gp_to_CO2rate <- function(Gp, temp=25){
   return(Gp * 1.965 * .0046 / 60* (8.314*(273.15+temp)/101.325) * 1000)
 }

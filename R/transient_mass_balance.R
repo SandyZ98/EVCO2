@@ -19,31 +19,32 @@
 #' @param EUB for L-BFGS-B, upper bound for emission rates in micrograms/s
 #' @param QLB for L-BFGS-B, lower bound for ventilation rate in m^3/s
 #' @param QUB for L-BFGS-B, upper bound for ventilation rate in m^3/s
-#' @param verbose 
-#' @param record.steps 
+#' @param verbose
+#' @param record.steps
 #'
-#' @return list with elements: Q (ventilation rate in m^3/s), 
+#' @return list with elements: Q (ventilation rate in m^3/s),
 #' ACH (ventilation rate in 1/h),
-#' E (emission rates in micrograms/s) if estimated, 
+#' E (emission rates in micrograms/s) if estimated,
 #' f (value of sum of squares at convergence),
-#' envCO2 (environmental CO2 concentration in ppm) if estimated, 
+#' envCO2 (environmental CO2 concentration in ppm) if estimated,
 #' iter (number of iterations),
 #' convergence (convergence code, 0 for success)
-#' 
+#'
 #' @export
 #'
 #' @examples
-transient_mass_balance <- function(freq, 
-                                 CO2, 
-                                 volume, 
-                                 envCO2known=NULL, 
-                                 init.Q, 
-                                 temp=25, 
-                                 persondata=NULL, 
-                                 critpoints=NULL, 
-                                 method='NR', 
-                                 max.iter=1000, 
-                                 tol=1e-8, 
+#'
+transient_mass_balance <- function(freq,
+                                 CO2,
+                                 volume,
+                                 envCO2known=NULL,
+                                 init.Q,
+                                 temp=25,
+                                 persondata=NULL,
+                                 critpoints=NULL,
+                                 method='NR',
+                                 max.iter=1000,
+                                 tol=1e-8,
                                  E.init = NULL,
                                  envCO2.init=NULL,
                                  envCO2LB = 375, # use with LBFGSB
@@ -53,21 +54,21 @@ transient_mass_balance <- function(freq,
                                  QLB = 0.001, # use with LBFGSB
                                  QUB = 10, # use with LBFGSB
                                  verbose=FALSE, record.steps=FALSE) {
-  
+
   # format data
   CO2 = as.numeric(CO2)
-  
+
   # get emissions from persondata
   if (is.null(persondata) & method=="NR") {
     stop("persondata must be provided for 1D Newton-Raphson optimization")
   }
-  
+
   if(!is.null(persondata)){
-    
+
     emissions <- persondata_to_emission(persondata, temp, freq)
     times <- emissions$times
     nadj_CO2rate <- emissions$nadj_CO2rate
-    
+
     if(length(CO2) > length(times)) {
       warning(sprintf("More CO2 measurements than expected from persondata. Make sure the persondata starts at 0 and covers the same time period as the CO2 data. Using the last row of persondata for the last %d CO2 measurements", length(CO2) - length(times)))
       nadj_CO2rate <- c(nadj_CO2rate, rep(nadj_CO2rate[length(nadj_CO2rate)], length(CO2) - length(times)))
@@ -76,18 +77,18 @@ transient_mass_balance <- function(freq,
     }
     nadj_CO2rate <- nadj_CO2rate[1:length(CO2)]
   }
-  
+
   # Convert from ppm to ug/m^3
   ppm_to_ug <- function(ppm, temp){
     ppm / 44.01 * 8314 * (273.15+temp) / 1000 / 101.325
   }
-  
+
   # convert from ug/m^3 to ppm
   ug_to_ppm <- function(ug, temp) {
     ug * 44.01 * 1000 * 101.325 / 8314 / (273.15+temp)
   }
-  
-  
+
+
   if(!is.null(envCO2known)){
     envCO2known <- ppm_to_ug(envCO2known, temp)
   }else{
@@ -96,7 +97,7 @@ transient_mass_balance <- function(freq,
   CO2 <- ppm_to_ug(CO2, temp)
   envCO2LB <- ppm_to_ug(envCO2LB, temp)
   envCO2UB <- ppm_to_ug(envCO2UB, temp)
-  
+
   # # Gradient descent
   #   Q = init.Q
   #   convergence = 0
@@ -121,13 +122,13 @@ transient_mass_balance <- function(freq,
   #     Q = Q2
   #   }
   # }
-  
+
   # Newton-Raphson
   if(method == 'NR'){
     if (verbose) {
       print("Running Newton-Raphson")
     }
-    
+
     if (record.steps) {
       steps <- data.frame(iter=numeric(max.iter),
                           Q=numeric(max.iter), # estimates for ventilation rate
@@ -135,7 +136,7 @@ transient_mass_balance <- function(freq,
                           df=numeric(max.iter), # derivative of SS
                           d2f=numeric(max.iter)) # 2nd derivative of SS
     }
-    
+
     Q = init.Q
     convergence = 1
     E = nadj_CO2rate[1:(length(CO2)-1)]
@@ -145,32 +146,32 @@ transient_mass_balance <- function(freq,
     for(iter in 1:max.iter){
       expQ = exp(-Q/volume*freq)
       Chat_C = E/Q*(1-expQ)+(Ci_1 - envCO2)*expQ + envCO2 - Ci
-      
+
       derivChat_C = -E/(Q^2) * (1-expQ) + expQ * (freq / volume) * (E/Q - Ci_1 + envCO2)
 
       f = 2*sum(Chat_C*derivChat_C)
       df = 2*sum(derivChat_C^2 + Chat_C*(
         2*E/(Q^3)*(1-expQ) -
-          expQ * (freq/volume)^2 * (E/Q - Ci_1 + envCO2) + 
-          2*E/Q^2 * expQ *(-freq/volume) 
+          expQ * (freq/volume)^2 * (E/Q - Ci_1 + envCO2) +
+          2*E/Q^2 * expQ *(-freq/volume)
       ))
       Q2 = Q - f/df
-      
+
       if (verbose) {
-        print(paste("Iter:",iter, 
-                    "Q:", Q2, 
-                    "df:",f, 
+        print(paste("Iter:",iter,
+                    "Q:", Q2,
+                    "df:",f,
                     "d2f:",df))
       }
-      
+
       if (record.steps) {
-        steps[iter,] <- c(iter=iter, 
-                          Q=Q, 
-                          f=Chat_C %*% Chat_C, 
-                          df=f, 
+        steps[iter,] <- c(iter=iter,
+                          Q=Q,
+                          f=Chat_C %*% Chat_C,
+                          df=f,
                           d2f=df)
       }
-      
+
       if(abs(Q-Q2) < tol){
         convergence=0
         break()
@@ -179,41 +180,41 @@ transient_mass_balance <- function(freq,
     }
     if (record.steps) {
       steps=steps[1:iter,]
-      
-      return(list(ventilation = Q, 
+
+      return(list(ventilation = Q,
                   ACH = Q/volume*3600,
-                  iter=iter, 
+                  iter=iter,
                   f=Chat_C %*% Chat_C,
                   convergence=convergence,
                   steps=steps))
     } else {
-      return(list(ventilation = Q, 
+      return(list(ventilation = Q,
                   ACH = Q/volume*3600,
                   f=Chat_C%*%Chat_C,
-                  iter=iter, 
-                  convergence=convergence)) 
+                  iter=iter,
+                  convergence=convergence))
     }
   }
-  
+
   if(method == 'Newton'){
     if (verbose) {
       print("Running Multi-dimensional Newton Method")
     }
-    return(multi_Newton(persondata=persondata,  
-                        max.iter=max.iter, tol=tol, 
-                        verbose=verbose, record.steps=record.steps, 
+    return(multi_Newton(persondata=persondata,
+                        max.iter=max.iter, tol=tol,
+                        verbose=verbose, record.steps=record.steps,
                         critpoints=critpoints, nadj_CO2rate=nadj_CO2rate,
                         CO2=CO2, init.Q=init.Q, envCO2known=envCO2known,
                         E.init = E.init, envCO2.init = envCO2.init, freq=freq, temp=temp))
   }
-  
-  
+
+
   # LBFGSB with optim
   if(method=='L-BFGS-B') {
     if(verbose) {
       print('Running L-BFGS-B method')
     }
-    param_setup <- multidimensional_param_setup(persondata=persondata,  
+    param_setup <- multidimensional_param_setup(persondata=persondata,
                                                 critpoints=critpoints, nadj_CO2rate=nadj_CO2rate,
                                                 CO2=CO2, envCO2known=envCO2known,
                                                 E.init = E.init, envCO2.init = envCO2.init)
@@ -223,10 +224,10 @@ transient_mass_balance <- function(freq,
     E = param_setup$E
     E.init = param_setup$E.init
     envCO2 = param_setup$envCO2
-    
+
     Ci_1 = CO2[1:(length(CO2)-1)]
     Ci = CO2[2:length(CO2)]
-    
+
     SSfxn = function(params){
       Q = params[1] # ventilation rate
       if(estimate_E) {
@@ -237,19 +238,19 @@ transient_mass_balance <- function(freq,
         }
         if(estimate_envCO2) {
           envCO2 = params[length(params)]
-        } 
+        }
       } else {
         if(estimate_envCO2) {
           envCO2 = params[2]
         }
       }
-      
+
       q = exp(-Q/volume*freq)
       Chat_C = E/Q*(1-q)+(Ci_1 - envCO2)*q + envCO2 - Ci
       f0 = sum(Chat_C^2)
       return(f0)
     }
-    
+
     gradient = function(params){
       Q = params[1]
       if(estimate_E){
@@ -260,13 +261,13 @@ transient_mass_balance <- function(freq,
         }
         if(estimate_envCO2) {
           envCO2 = params[length(params)]
-        } 
+        }
       } else {
         if(estimate_envCO2) {
           envCO2 = params[2]
         }
       }
-      
+
       q = exp(-Q/volume*freq)
       Chat_C = E/Q*(1-q)+(Ci_1 - envCO2)*q + envCO2 - Ci
       derivChat_C = -E/(Q^2) * (1-q) + q * (freq / volume) * (E/Q - Ci_1 + envCO2)
@@ -278,13 +279,13 @@ transient_mass_balance <- function(freq,
             index = Eindices[[i]]
             gradient_ret[i+1] = 2*sum(dSSdE[index])
           }
-      } 
+      }
       if(estimate_envCO2){
           gradient_ret[length(gradient_ret)] <- 2*sum(Chat_C*(1-q))
-      } 
+      }
       return(gradient_ret)
     }
-    
+
     if(estimate_E){
       E_unique = numeric(length(Eindices))
       for(i in 1:length(Eindices)){
@@ -312,15 +313,15 @@ transient_mass_balance <- function(freq,
         UB = c(QUB)
       }
     }
-    
-    ret <- (optim(par = par, fn = SSfxn, gr = gradient, method = 'L-BFGS-B', lower = LB, 
+
+    ret <- (optim(par = par, fn = SSfxn, gr = gradient, method = 'L-BFGS-B', lower = LB,
           upper = UB, control = list(maxit = max.iter, trace = verbose, REPORT=1)))
-    my_ret <- list(ventilation = ret$par[1], 
+    my_ret <- list(ventilation = ret$par[1],
                    ACH = ret$par[1]/volume*3600,
                   E = c(E = 'not estimated'),
-                envCO2 = c(envCO2 = 'not estimated'), 
-               f = ret$value, 
-               iter = ret$counts[1], 
+                envCO2 = c(envCO2 = 'not estimated'),
+               f = ret$value,
+               iter = ret$counts[1],
                 convergence = ret$convergence)
     if(estimate_E){
       my_ret$E = ret$par[2:(length(Eindices)+1)]
@@ -330,16 +331,16 @@ transient_mass_balance <- function(freq,
     }
     return(my_ret)
   }
-  
-  
+
+
   # Nelder-Mead with optim
   if(method == 'Nelder-Mead'){
     if(verbose) {
       print('Running Nelder-Mead method')
     }
-    param_setup <- multidimensional_param_setup(CO2=CO2, 
-                                                persondata=persondata, 
-                                                critpoints=critpoints, 
+    param_setup <- multidimensional_param_setup(CO2=CO2,
+                                                persondata=persondata,
+                                                critpoints=critpoints,
                                                 envCO2known=envCO2known,
                                                 envCO2.init=envCO2.init,
                                                 E.init=E.init,
@@ -350,10 +351,10 @@ transient_mass_balance <- function(freq,
     E = param_setup$E
     E.init = param_setup$E.init
     envCO2 = param_setup$envCO2
-    
+
     Ci_1 = CO2[1:(length(CO2)-1)]
     Ci = CO2[2:length(CO2)]
-    
+
     SSfxn = function(params, ...){
       Q = params[1] # ventilation rate
       if(estimate_E) {
@@ -364,19 +365,19 @@ transient_mass_balance <- function(freq,
         }
         if(estimate_envCO2) {
           envCO2 = params[length(params)]
-        } 
+        }
       } else {
         if(estimate_envCO2) {
           envCO2 = params[2]
         }
       }
-      
+
       q = exp(-Q/volume*freq)
       Chat_C = E/Q*(1-q)+(Ci_1 - envCO2)*q + envCO2 - Ci
       f0 = sum(Chat_C^2)
       return(f0)
     }
-    
+
     if(estimate_E){
       E_unique = numeric(length(Eindices))
       for(i in 1:length(Eindices)){
@@ -403,14 +404,14 @@ transient_mass_balance <- function(freq,
       ret <- optim(par = par, fn = function(x) {
         SSfxn(x,estimate_E = estimate_E, estimate_envCO2 = estimate_envCO2,
               Eindices = Eindices, volume = volume, freq=freq, Ci, Ci_1)
-              }, method = 'Nelder-Mead', lower = LB, 
+              }, method = 'Nelder-Mead', lower = LB,
                     upper = UB, control = list(maxit = max.iter, trace = verbose))
-      my_ret <- list(ventilation = ret$par[1], 
+      my_ret <- list(ventilation = ret$par[1],
                      ACH = ret$par[1]/volume*3600,
                      E = c(E = 'not estimated'),
-                     envCO2 = c(envCO2 = 'not estimated'), 
-                     f = ret$value, 
-                     iter = ret$counts[1], 
+                     envCO2 = c(envCO2 = 'not estimated'),
+                     f = ret$value,
+                     iter = ret$counts[1],
                      convergence = ret$convergence)
       if(estimate_E){
         my_ret$E = ret$par[2:(length(Eindices)+1)]
@@ -428,10 +429,10 @@ multi_Newton <- function(persondata, max.iter, tol, verbose, record.steps, critp
   ug_to_ppm <- function(ug, temp) {
     ug * 44.01 * 1000 * 101.325 / 8314 / (273.15+temp)
   }
-  
-  param_setup <- multidimensional_param_setup(CO2=CO2, 
-                                              persondata=persondata, 
-                                              critpoints=critpoints, 
+
+  param_setup <- multidimensional_param_setup(CO2=CO2,
+                                              persondata=persondata,
+                                              critpoints=critpoints,
                                               envCO2known=envCO2known,
                                               envCO2.init=envCO2.init,
                                               E.init=E.init,
@@ -442,7 +443,7 @@ multi_Newton <- function(persondata, max.iter, tol, verbose, record.steps, critp
   E = param_setup$E
   E.init = param_setup$E.init
   envCO2 = param_setup$envCO2
-  
+
   convergence = 1
   Gradient_summand = function(){ # calculates the summands of the gradient
     if(estimate_E){
@@ -462,7 +463,7 @@ multi_Newton <- function(persondata, max.iter, tol, verbose, record.steps, critp
     if(estimate_E){
       d2SSdE2 <- ((1/Q*(1-q))  ^2)
       d2SSdEdQ <- (
-        Chat_C*(-1/Q^2*(1-q) + 1/Q*(freq/volume)*q) + 
+        Chat_C*(-1/Q^2*(1-q) + 1/Q*(freq/volume)*q) +
           1/Q*(1-q)*derivChat_C)
     } else {
       d2SSdE2 <- 0
@@ -470,8 +471,8 @@ multi_Newton <- function(persondata, max.iter, tol, verbose, record.steps, critp
     }
     d2SSdQ2 <- (derivChat_C^2 + Chat_C*(
       2*E/(Q^3)*(1-q) -
-        q * (freq/volume)^2 * (E/Q - Ci_1 + envCO2) + 
-        2*E/Q^2 * q *(-freq/volume))) 
+        q * (freq/volume)^2 * (E/Q - Ci_1 + envCO2) +
+        2*E/Q^2 * q *(-freq/volume)))
     if(estimate_envCO2){
       d2SSdenvCO22 <- ((1-q)^2)
       d2SSdQdenvCO2 <- (
@@ -488,19 +489,19 @@ multi_Newton <- function(persondata, max.iter, tol, verbose, record.steps, critp
     }
     return(list(d2SSdE2, d2SSdEdQ, d2SSdQ2, d2SSdEdenvCO2, d2SSdQdenvCO2, d2SSdenvCO22))
   }
-  
+
   gradient = c(0) # initialize gradient as vector of length 1 (only estimating Q)
   hessiandim = 1 # initialize hessian as matrix of size 1x1 (only estimating Q)
-  
+
   if(estimate_E){
     gradient = c(gradient, rep(0, length(Eindices))) # add to gradient for each E we need to estimate
     hessiandim = hessiandim + length(Eindices) # add to hessian for each E we need to estimate
-  } 
-  
+  }
+
   if(estimate_envCO2){
     gradient = c(gradient, 0) # add to gradient for envCO2
     hessiandim = hessiandim + 1 # add to hessian for envCO2
-  } 
+  }
   Ci_1 = CO2[1:(length(CO2)-1)]
   Ci = CO2[2:length(CO2)]
   Q = init.Q
@@ -519,13 +520,13 @@ multi_Newton <- function(persondata, max.iter, tol, verbose, record.steps, critp
       steps[paste0('E', Enum)] = numeric(max.iter)
     }
   }
-  
+
   for(iter in 1:max.iter){
     #q = exp(-Q/volume*freq)
     #Chat_C = E/Q*(1-q)+(Ci_1 - envCO2)*q + envCO2 - Ci
     #derivChat_C =(-E/Q^2)*(1-q) + E/Q*(freq/volume)*q + (Ci_1 - envCO2)*(-freq/volume)*q
     derivChat_C = -E/(Q^2) * (1-q) + q * (freq / volume) * (E/Q - Ci_1 + envCO2)
-    
+
     gradientres <- Gradient_summand()
     dSSdE = gradientres[[1]]
     dSSdQ = gradientres[[2]]
@@ -556,7 +557,7 @@ multi_Newton <- function(persondata, max.iter, tol, verbose, record.steps, critp
           hessian[nrow(hessian), i+1] = hessian[i+1, nrow(hessian)]
         }
       }
-    } 
+    }
     if(estimate_envCO2){
       #gradient[length(gradient)] = 2*mean(dSSdenvCO2)
       gradient[length(gradient)] = 2*sum(dSSdenvCO2)
@@ -568,8 +569,8 @@ multi_Newton <- function(persondata, max.iter, tol, verbose, record.steps, critp
     }
     #delta =  solve(hessian + diag(1e-2, nrow=nrow(hessian)))%*%gradient
     delta =  solve(hessian)%*%gradient
-    
-    # update parameters 
+
+    # update parameters
     #Qnew = max(Q - delta[1], 1e-6) # constrain to be positive
     Qnew = Q - delta[1]
     if(estimate_E){
@@ -596,10 +597,10 @@ multi_Newton <- function(persondata, max.iter, tol, verbose, record.steps, critp
         index = Eindices[[i]]
         Es[i] = paste("E", i, ":", E[index[1]])
       }
-      print(paste("Iter:",iter, 
-                  "Q:", Q, 
+      print(paste("Iter:",iter,
+                  "Q:", Q,
                   "envCO2:", ug_to_ppm(envCO2, temp),
-                  "f:",f1, 
+                  "f:",f1,
                   "sum_delta:", sum(delta)))
       print(Es)
     }
@@ -610,7 +611,7 @@ multi_Newton <- function(persondata, max.iter, tol, verbose, record.steps, critp
         Etemp[i] = E[index[1]]
       }
       steps[iter,] <- c(iter, Q, ug_to_ppm(envCO2, temp), f1, sum(delta), Etemp)
-      
+
     }
     #if(abs(f1-f0)<=tol*(abs(f1)+abs(f0))){
     if(sqrt(gradient %*% gradient)<=tol){
@@ -621,31 +622,31 @@ multi_Newton <- function(persondata, max.iter, tol, verbose, record.steps, critp
   }
   if (record.steps) {
     steps=steps[1:iter,]
-    
-    return(list(ventilation = Q, 
+
+    return(list(ventilation = Q,
                 ACH = Q/volume*3600,
                 E = E,
                 envCO2 = ug_to_ppm(envCO2, temp),
                 f=f1,
-                iter=iter, 
+                iter=iter,
                 convergence=convergence,
                 steps=steps))
   } else {
-    return( list(ventilation = Q, 
+    return( list(ventilation = Q,
                  ACH = Q/volume*3600,
                  E = E,
                  envCO2 = ug_to_ppm(envCO2, temp),
                  f=f1,
-                 iter=iter, 
+                 iter=iter,
                  convergence=convergence))
   }
 }
 
 
 #helper function to set up E and envCO2 parameters for multidimensional optimization
-multidimensional_param_setup <- function(CO2, 
-                                         persondata, 
-                                         critpoints, 
+multidimensional_param_setup <- function(CO2,
+                                         persondata,
+                                         critpoints,
                                          envCO2known,
                                          envCO2.init,
                                          E.init,
@@ -664,7 +665,7 @@ multidimensional_param_setup <- function(CO2,
   }else {
     estimate_E = FALSE
   }
-  
+
   Eindices = list()
   if(estimate_E){
     # indices corresponding to the intervals over which we will estimate E separately
@@ -673,7 +674,7 @@ multidimensional_param_setup <- function(CO2,
       Eindices[[i]]= critpoints[i-1]:critpoints[i]
     }
     if(critpoints[length(critpoints)] < length(CO2)) { # add the last interval, if needed
-      Eindices[[length(critpoints)+1]] = critpoints[length(critpoints)]:(length(CO2)-1) 
+      Eindices[[length(critpoints)+1]] = critpoints[length(critpoints)]:(length(CO2)-1)
     }
     E = rep(0, length(CO2)-1)
     if(!is.null(E.init)){
@@ -690,7 +691,7 @@ multidimensional_param_setup <- function(CO2,
     Eindices[[1]] = 1:(length(CO2)-1)
     E = nadj_CO2rate[1:(length(CO2)-1)]
   }
-  
+
   if(estimate_envCO2){
     if(!is.null(envCO2.init)){
       envCO2 = envCO2.init
@@ -707,4 +708,3 @@ multidimensional_param_setup <- function(CO2,
               E = E,
               envCO2 = envCO2))
 }
-  

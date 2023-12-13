@@ -7,8 +7,6 @@
 CO2rate_to_Gp(CO2rate, temp = 25)
 }
 \arguments{
-\item{CO2rate}{}
-
 \item{temp}{}
 }
 \value{

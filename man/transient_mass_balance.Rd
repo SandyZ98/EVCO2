@@ -67,16 +67,14 @@ transient_mass_balance(
 
 \item{QUB}{for L-BFGS-B, upper bound for ventilation rate in m^3/s}
 
-\item{verbose}{}
-
 \item{record.steps}{}
 }
 \value{
-list with elements: Q (ventilation rate in m^3/s), 
+list with elements: Q (ventilation rate in m^3/s),
 ACH (ventilation rate in 1/h),
-E (emission rates in micrograms/s) if estimated, 
+E (emission rates in micrograms/s) if estimated,
 f (value of sum of squares at convergence),
-envCO2 (environmental CO2 concentration in ppm) if estimated, 
+envCO2 (environmental CO2 concentration in ppm) if estimated,
 iter (number of iterations),
 convergence (convergence code, 0 for success)
 }
