@@ -7,3 +7,4 @@ Description: The package aims to use time series data of CO2 to calculate the ro
 License: Fall 23 Biostat 615 Group Project
 Encoding: UTF-8
 LazyData: true
+RoxygenNote: 7.2.1
