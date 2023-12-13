@@ -1,0 +1,19 @@
+---
+title: "EVCO2 Tutorial"
+author: "Abby Mauger"
+date: "2023-12-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(EVCO2)
+```
+
+# EVCO2 Tutorial - Estimating ventilation rates from CO2 time series data
+
+## Example data
+
+```{r}
+
+```

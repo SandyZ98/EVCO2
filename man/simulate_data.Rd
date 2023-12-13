@@ -54,6 +54,6 @@ inputdata_example <- data.frame(
   CO2rate = rep(NA, 5)
 )
 
-exdata <- simulateData(persondata = inputdata_example, volume=500, ventilation_rate = .1, CO2var = 0.01)
-exdata2 <- simulateData(persondata = inputdata_example, volume=500, ventilation_rate = .5, CO2var = 0.01)
+exdata <- simulate_data(persondata = inputdata_example, volume=500, ventilation_rate = .1, CO2var = 0.01)
+exdata2 <- simulate_data(persondata = inputdata_example, volume=500, ventilation_rate = .5, CO2var = 0.01)
 }
