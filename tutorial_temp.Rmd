@@ -2,7 +2,9 @@
 title: "EVCO2 Tutorial"
 author: "Abby Mauger"
 date: "2023-12-13"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -183,11 +185,13 @@ simdat <- simulate_data(freq=1,
               method='Euler')
 keep_these <- seq(1, nrow(simdat), by=120)
 simdat <- simdat[keep_these,]
+simdat$POSIXtime = as.POSIXct(simdat$time*3600,
+                              origin = times[1])
 
-ggplot(data=simdat, aes(x=time, y=CO2)) + 
+ggplot(data=simdat, aes(x=POSIXtime, y=CO2)) + 
   geom_point() + 
   geom_line() + 
-  labs(x="Time (hrs)", y="CO2 (ppm)") + theme_bw() 
+  labs(x="Time", y="CO2 (ppm)") + theme_bw() 
 
 ```
 
@@ -219,7 +223,7 @@ transient_mass_balance(freq=freq,
                        init.Q = .5,
                        temp=temp,
                        persondata=ex_persondata,
-                       method='Newton')
+                       method='Newton')[c('ventilation', 'ACH', 'envCO2', 'f', 'iter', 'convergence')]
 
 # L-BFGS-B method
 transient_mass_balance(freq=freq,
@@ -265,3 +269,6 @@ transient_mass_balance(freq=freq,
                        method='L-BFGS-B')
 
 ```
+
+
+
