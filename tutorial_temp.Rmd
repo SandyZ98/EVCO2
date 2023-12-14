@@ -63,8 +63,10 @@ Using this information, we can create a small data frame `ex_persondata` describ
 ```{r}
 # get Gp rate from respiratory rate based on EPA exposures handbook
 Gp = Gp_rate(16/24) 
-# transient mass balance method uses CO2rate in L/s, so we need to convert:
-CO2rate = Gp/60
+# transient mass balance method uses CO2rate in L/s at 0C, so we need to convert:
+# first convert L to mol, then use ideal gas law to convert to 0C
+# divide by 60 to convert from L/min to L/s
+CO2rate = Gp * .0446 * (8.314*273.15/101.325) / 60
 
 # create persondata dataframe
 ex_persondata <- data.frame(

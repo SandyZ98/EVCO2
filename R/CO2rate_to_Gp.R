@@ -1,10 +1,3 @@
-# CO2rate adjusted to room temperature and convert to ug/s
-# Gmole = 0.0446*G (L/s) (/60 if L/min)
-# Gadj (L/s) = 8.314 (J/mol/K) * (273.15+temp) (K) / 101.325 (kPa) * Gmole (mol/s)
-# note: kPa = J/L
-# Gadj (g/s) = 1.965 * Gadj (L/s)
-# putting it all together: convert from L/s to ug/s at a particular temperature
-
 # CO2rate ug/s to Gp L/min
 #' Convert CO2 emission rates (in micrograms/s) to Gp (in L/min)
 #'
@@ -17,7 +10,10 @@
 #' @examples
 #'
 CO2rate_to_Gp <- function(CO2rate, temp=25){
-  return(CO2rate / 1.965 / .0046 * 60 / (8.314*(273.15+temp)/101.325) / 1000)
+  # use 1.98 g/L as the density of CO2 at temperatures near 20-25 C
+  # volume = mass / density
+  # Gp L/min = CO2 ug/s * 60 s / min * 1 g / 1e6 ug  / 1.98 g / L
+  return(CO2rate * 60 / 1e6 / 1.98)
 
 }
 
@@ -33,6 +29,9 @@ CO2rate_to_Gp <- function(CO2rate, temp=25){
 #' @examples
 #'
 Gp_to_CO2rate <- function(Gp, temp=25){
-  return(Gp * 1.965 * .0046 / 60* (8.314*(273.15+temp)/101.325) * 1000)
+  # use 1.98 g/L as the density of CO2 at temperatures near 20-25 C
+  # mass = volume * density
+  # CO2 ug/s = Gp L/min * 1 min / 60 s * 1.98 g / L * 1e6 ug / 1 g
+  return(Gp / 60 * 1.98 * 1e6)
 }
 
