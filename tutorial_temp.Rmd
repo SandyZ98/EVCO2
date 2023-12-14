@@ -8,12 +8,260 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(EVCO2)
+library(ggplot2)
 ```
 
 # EVCO2 Tutorial - Estimating ventilation rates from CO2 time series data
 
 ## Example data
 
+some description of the example data...
+note, it is loaded with package
+
 ```{r}
+head(example_data)
+
+
+times = example_data$`Time(dd/mm/yyyy)`
+times = as.POSIXct(times, format = "%d/%m/%Y %I:%M:%S %p")
+CO2 = example_data$`Carbon dioxide(ppm)`
+
+# Plotting the time series data
+ggplot(data=data.frame(times=times, CO2=CO2), aes(x=times, y=CO2)) + 
+  geom_point() + 
+  geom_line() + 
+  labs(x="Time", y="CO2 (ppm)") + theme_bw() 
+
+```
+
+
+### Transient Mass Balance Method 
+
+We will assume that 5 people enter the room at 9 am and then leave at 5 pm each day. We first need to find the indices that correspond to these times, and then compute the number of hours since the start of data collection at each of these times.
+
+```{r}
+ind0 <- which(times == "2023-11-13 18:01:35 EST") # people leave for the day
+ind1 <- which(times == "2023-11-14 8:01:36 EST") # people come in
+ind2 <- which(times == "2023-11-14 18:01:36 EST") # people leave
+ind3 <- which(times == "2023-11-15 8:01:35 EST") # people come in
+ind4 <- which(times == "2023-11-15 18:01:35 EST") # people leave
+
+hr0 <- as.numeric(difftime(times[ind0], times[1], units = "hours"))
+hr1 <- as.numeric(difftime(times[ind1], times[1], units = "hours"))
+hr2 <- as.numeric(difftime(times[ind2], times[1], units = "hours"))
+hr3 <- as.numeric(difftime(times[ind3], times[1], units = "hours"))
+hr4 <- as.numeric(difftime(times[ind4], times[1], units = "hours"))
+end <- as.numeric(difftime(times[length(times)], times[1], units = "hours"))
+```
+
+Using this information, we can create a small data frame `ex_persondata` describing the occupancy pattern in the room over the time period during which the data were collected.
+
+`time` is the time in hours since the start of data collection, and `n` is the number of people in the room at that time. `CO2rate` is the CO2 generation rate of each person in micrograms/s. We need to include the start and end times in this data frame, and we will assume that there are 5 people in the room at the start of data collection.
+
+```{r}
+# get Gp rate from respiratory rate based on EPA exposures handbook
+Gp = Gp_rate(16/24) 
+# transient mass balance method uses CO2rate in L/s, so we need to convert:
+CO2rate = Gp/60
+
+# create persondata dataframe
+ex_persondata <- data.frame(
+  time = c(0, hr0, hr1, hr2, hr3, hr4, end+.02), # include small offset at end
+  n = c(5, 0, 5, 0, 5, 0, 0),
+  CO2rate = c(CO2rate, 0, CO2rate, 0, CO2rate, 0, 0)
+  )
+```
+
+We need to set a few more parameters, and then we can estimate ventilation rate using the transient mass balance method.
+
+```{r}
+# volume is based on measurements of the room and should be in m^3
+volume = .0254^3*321*378*114
+# environmental CO2 concentration in ppm
+envCO2 = 400 
+# room temperature in degrees Celsius
+temp = 25
+# freq is time step between measurements
+# note, measurements are equally spaced
+freq = as.numeric(difftime(times[2], times[1], units = "secs"))
+```
+
+Now we can estimate the ventilation rate using the 1D optimization algorithm implemented in the `transient_mass_balance` function. The function returns a list containing the estimated ventilation rate in m^3/s and in air exchanges per hour (ACH), as well as the value of the objective function being minimized at the estimated ventilation rate, the number of iterations, and a convergence code (0 indicates convergence).
+
+Note, it is common to get warnings if there are discrepancies between the `persondata` input and the `CO2` input. As long as 
+
+```{r}
+transient_mass_balance(freq=freq,
+                       CO2=CO2,
+                       envCO2known=envCO2,
+                       volume=volume,
+                       init.Q = 1,
+                       temp=temp,
+                       persondata=ex_persondata,
+                       method='NR')
+```
+Suppose we aren't very confident that the environmental CO2 estimate is correct. We can also estimate the environmental CO2 concentration using the `transient_mass_balance` function. We just need to set `envCO2known = NULL` and provide an initial guess for the environmental CO2 concentration.
+
+```{r}
+# Try using the L-BFGS-B method 
+transient_mass_balance(freq=freq,
+                       CO2=CO2,
+                       envCO2known=NULL,
+                       envCO2.init=400,
+                       volume=volume,
+                       init.Q = 1,
+                       temp=temp,
+                       persondata=ex_persondata,
+                       method='L-BFGS-B')
+
+# Try using the Nelder-Mead method
+# in this case, they converge to the same solution
+transient_mass_balance(freq=freq,
+                       CO2=CO2,
+                       envCO2known=NULL,
+                       envCO2.init=400,
+                       volume=volume,
+                       init.Q = 1,
+                       temp=temp,
+                       persondata=ex_persondata,
+                       method='Nelder-Mead')
+
+
+```
+
+If we do not trust our occupancy patterns, we can also estimate ventilation rates rather than use `ex_persondata`. We will provide a vector of indices at which the estimated CO2 emission rate should be allowed to vary. For example, if we assume the occupancy changes at 9 am and 5 pm, we can use these as "critical points" for the estimated CO2 emission rates. 
+
+With the 'L-BFGS-B' method, we can also provide bounds on the estimated parameters. For example, we can assume that the CO2 emission rates (in micrograms/s) are between 0 and 25. By default, environmental CO2 is bounded between 375 and 425 ppm.
+
+```{r}
+# Try using the L-BFGS-B method
+# We can provide bounds on any of the estimated parameters
+transient_mass_balance(freq=freq,
+                       CO2=CO2,
+                       envCO2.init=400,
+                       volume=volume,
+                       init.Q = 1,
+                       temp=temp,
+                       ELB = 0,
+                       EUB = 25,
+                       envCO2LB = 380,
+                       envCO2UB = 420,
+                       critpoints=c(ind0, ind1, ind2, ind3, ind4),
+                       method='L-BFGS-B')
+
+# Try using the Nelder-Mead method
+transient_mass_balance(freq=freq,
+                       CO2=CO2,
+                       envCO2.init=400,
+                       volume=volume,
+                       init.Q = 1,
+                       temp=temp,
+                       critpoints=c(ind0, ind1, ind2, ind3, ind4),
+                       method='Nelder-Mead')
+```
+
+
+## Simulating data
+
+We can simulate data for a given occupancy pattern, volume, ventilation rate, and environmental CO2 concentration using the `simulate_data` function. 
+
+Note, `simulate_data` may take longer to run on the first call. This is because it is compiling the C++ code used to simulate the data. Subsequent calls should be faster.
+
+For this example, we will use the same parameters that we used for our real data but we will assume that the ventilation rate is 6 ACH. 
+
+```{r} 
+# note, we need to convert ACH to m^3/s by multiplying by the volume and dividing by 3600
+# we will simulate data every second (freq = 1), but only keep every 120 seconds
+simdat <- simulate_data(freq=1,
+              volume=volume,
+              ventilation_rate = 6/3600*volume,
+              temp=temp,
+              persondata=ex_persondata,
+              envCO2=envCO2,
+              startCO2 = envCO2,
+              CO2var = 0.1,
+              method='Euler')
+keep_these <- seq(1, nrow(simdat), by=120)
+simdat <- simdat[keep_these,]
+
+ggplot(data=simdat, aes(x=time, y=CO2)) + 
+  geom_point() + 
+  geom_line() + 
+  labs(x="Time (hrs)", y="CO2 (ppm)") + theme_bw() 
+
+```
+
+### Transient Mass Balance Method
+
+We can use `transient_mass_balance` to estimate the ventilation rate with the simulated data.
+
+```{r}
+transient_mass_balance(freq=freq,
+                       CO2=simdat$CO2,
+                       envCO2known=envCO2,
+                       volume=volume,
+                       init.Q = 1,
+                       temp=temp,
+                       persondata=ex_persondata,
+                       method='NR')
+# we get close to the true ventilation rate of 6 ACH
+```
+
+We can also assess how well the multidimensional optimization works if we assume envCO2 is unknown.
+
+```{r}
+# Newton's method
+transient_mass_balance(freq=freq,
+                       CO2=simdat$CO2,
+                       envCO2known=NULL,
+                       envCO2.init=415,
+                       volume=volume,
+                       init.Q = .5,
+                       temp=temp,
+                       persondata=ex_persondata,
+                       method='Newton')
+
+# L-BFGS-B method
+transient_mass_balance(freq=freq,
+                       CO2=simdat$CO2,
+                       envCO2known=NULL,
+                       envCO2.init=415,
+                       volume=volume,
+                       init.Q = .5,
+                       temp=temp,
+                       persondata=ex_persondata,
+                       method='L-BFGS-B')
+
+# Nelder-Mead method
+transient_mass_balance(freq=freq,
+                       CO2=simdat$CO2,
+                       envCO2known=NULL,
+                       envCO2.init=415,
+                       volume=volume,
+                       init.Q = .5,
+                       temp=temp,
+                       persondata=ex_persondata,
+                       method='Nelder-Mead')
+
+```
+
+All three optimization methods get close to the true ventilation rate of 6 ACH and true environmental CO2 concentration of 400 ppm.
+
+Now we will try the same thing but assume that we do not know the exact occupancy pattern. 
+
+```{r}
+# Try using the L-BFGS-B method
+transient_mass_balance(freq=freq,
+                       CO2=simdat$CO2,
+                       envCO2.init=400,
+                       volume=volume,
+                       init.Q = .5,
+                       temp=temp,
+                       ELB = 0,
+                       EUB = 25,
+                       envCO2LB = 380,
+                       envCO2UB = 420,
+                       critpoints= c(ind0, ind1, ind2, ind3, ind4),
+                       method='L-BFGS-B')
 
 ```

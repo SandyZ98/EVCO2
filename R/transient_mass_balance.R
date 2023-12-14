@@ -398,7 +398,7 @@ transient_mass_balance <- function(freq,
         par = c(Q = init.Q,
                 envCO2 = envCO2)
         LB = c(QLB, envCO2LB)
-        UB = c
+        UB = c(QUB, envCO2UB)
       }
     }
       ret <- optim(par = par, fn = function(x) {
