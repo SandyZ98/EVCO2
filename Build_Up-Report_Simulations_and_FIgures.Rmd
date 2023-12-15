@@ -295,7 +295,7 @@ Q=.1 # .1*3600/500 = .72 Air exchanges /hr
 var = 1 #Variance parameter for CO2 readings
 
 # Let's simulate data:
-simulated.dat <- simulateData(persondata=persondata,
+simulated.dat <- simulate_data(persondata=persondata,
                               volume=volume,
                               ventilation_rate=Q,
                               CO2var=var,
@@ -754,7 +754,7 @@ for (i in seq(1,length(variance_values))) { #length(variance_values)
       var = variance_values[i] #Variance parameter for CO2 readings
 
       # Let's simulate data:
-      simulated.dat <- simulateData(persondata=persondata,
+      simulated.dat <- simulate_data(persondata=persondata,
                                     volume=volume,
                                     ventilation_rate=Q,
                                     CO2var=var, 
@@ -834,8 +834,8 @@ interval_relerr_sd = matrix(0,4,10)
 
 #Lets calculate relative errors and generate summary info.
 for (i in seq(1:dim(raw_relerr)[3])){
- raw_relerr[,,i] = t(apply(raw_relerr[,,i], 1, function(x,truth){(x - truth) / truth}, ventilation_true))
- interval_relerr[,,i] = t(apply(interval_relerr[,,i], 1, function(x,truth){(x - truth) / truth}, ventilation_true))
+ raw_relerr[,,i] = abs(t(apply(raw_relerr[,,i], 1, function(x,truth){(x - truth) / truth}, ventilation_true)))
+ interval_relerr[,,i] = abs(t(apply(interval_relerr[,,i], 1, function(x,truth){(x - truth) / truth}, ventilation_true)))
  
  raw_relerr_mean[i,] = apply(raw_relerr[,,i], 2, mean)
  raw_relerr_sd[i,] = apply(raw_relerr[,,i], 2, sd)
