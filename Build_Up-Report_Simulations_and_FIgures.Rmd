@@ -1,5 +1,5 @@
 ---
-title: "BIOSTAT 615 Tom's Walkthrough"
+title: "Build Up - Report Simulations and Figures"
 author: "Thomas Cooper"
 date: "`r Sys.Date()`"
 output: html_document
@@ -675,27 +675,7 @@ room_height = 114 * 0.0254
 room_volume = room_length * room_width * room_height
 
 
-#Lets get outputdata for n = 1, n = 3, and n = 5
-
-output_data_1 = build_up_main(data_1$`Time(dd/mm/yyyy)`,
-                            data_1$`Carbon dioxide(ppm)`,
-                            NA,
-                            1,
-                            Gp,
-                            room_volume,
-                            NA,
-                            quant_cutoff = 0.7)
-
-output_data_3 = build_up_main(data_1$`Time(dd/mm/yyyy)`,
-                            data_1$`Carbon dioxide(ppm)`,
-                            NA,
-                            3,
-                            Gp,
-                            room_volume,
-                            NA,
-                            quant_cutoff = 0.7)
-
-output_data_5 = build_up_main(data_1$`Time(dd/mm/yyyy)`,
+output_data = build_up_main(data_1$`Time(dd/mm/yyyy)`,
                             data_1$`Carbon dioxide(ppm)`,
                             NA,
                             5,
@@ -704,9 +684,9 @@ output_data_5 = build_up_main(data_1$`Time(dd/mm/yyyy)`,
                             NA,
                             quant_cutoff = 0.7)
 
-output_data_5$raw_co2_df
+output_data$raw_co2_df
 
-output_data_5$interval_avg_df
+output_data$interval_avg_df
 
 #I am going to manually remove rows from the output that are not between 9 am and 5pm. We will assume that
 #There are not individuals in the building outside of working hours
@@ -717,8 +697,8 @@ output_data_5$interval_avg_df
 
 data_1$Color = rep(0, length(data_1$`Time(dd/mm/yyyy)`))
 
-for (row in seq(1, nrow(output_data_5$raw_co2_df))) {
-  index_change = seq(output_data_5$raw_co2_df$Index.Start[row], output_data_5$raw_co2_df$Index.Stop[row])
+for (row in seq(1, nrow(output_data$raw_co2_df))) {
+  index_change = seq(output_data$raw_co2_df$Index.Start[row], output_data$raw_co2_df$Index.Stop[row])
   data_1$Color[index_change] = 1
 }
 
