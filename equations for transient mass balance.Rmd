@@ -1,0 +1,45 @@
+---
+title: "equations"
+author: "Abby Mauger"
+date: "2023-12-15"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Some equations for transient mass balance
+
+\begin{align*}
+q &= e^{Q\Delta t/V} \\
+\hat{C_i} &=\frac{E}{Q}(1-q) + (C_{i-1} - C_R)q + C_R - C_i \\
+X_i &= \hat{C_i} - C_i \\
+\frac{\partial X_i}{\partial Q} &= -\frac{E}{Q^2}(1-q) + \frac{E}{Q}\frac{\Delta t}{V}q - (C_{i-1}-C_R)q\frac{\Delta t}{V} \\
+SS &= \sum_{i=1}^{n} (\hat{C_{i}} - C_{i})^2 
+
+\end{align*}
+
+The first order partial derivatives of sum of squares:
+
+
+\begin{align*}
+\frac{\partial SS}{\partial Q} &= \sum_{i=1}^n 2X_i\frac{\partial X_i}{\partial Q} \\
+\frac{\partial SS}{\partial E} &= \sum_{i=1}^n 2X_i\frac{1}{Q}(1-q) \\
+\frac{\partial SS}{\partial C_R} &= \sum_{i=1}^n 2X_i(1-q) \\
+\end{align*}
+
+
+The second order partial derivatives of sum of squares:
+
+\begin{align*}
+\frac{\partial^2 SS}{\partial Q^2} &= \sum_{i=1}^n 2\left(\frac{\partial X_i}{\partial Q}\right)^2 + 2X_i\left[2\frac{E}{Q^3}(1-q) - 2\frac{E}{Q^2}\frac{\Delta t}{V}q - (\frac{E}{Q} + C_R - C_{i-1})\left(\frac{\Delta t}{V}\right)^2q\right] \\
+\frac{\partial^2 SS}{\partial E^2} &= \sum_{i=1}^n 2\left(\frac{1}{Q}(1-q)\right)^2 \\
+\frac{\partial^2 SS}{\partial C_R^2} &= \sum_{i=1}^n 2(1-q)^2 \\
+\frac{\partial^2 SS}{\partial C_R \partial E} &= \sum_{i=1}^n 2\frac{(1-q)^2}{Q} \\
+\frac{\partial^2 SS}{\partial C_R \partial Q} &= \sum_{i=1}^n 2\left[X_i\frac{q \Delta t}{V} + \frac{\partial X_i}{\partial Q}(1-q)\right] \\
+\frac{\partial^2 SS}{\partial E \partial Q} &= \sum_{i=1}^n 2\left[X_i\left(\frac{q \Delta t}{V}\frac{1}{Q} - \frac{1-q}{Q^2}\right) + \frac{\partial X_i}{\partial Q}\frac{1-q}{Q}\right] \\
+\end{align*}
+
