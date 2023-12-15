@@ -27,4 +27,4 @@ Batterman S. Review and Extension of CO₂-Based Methods to Determine Ventilatio
 devtools::install_github("SandyZ98/EVCO2")
 ```
 ### How to use
-Please check the final report(https://docs.google.com/document/d/1MH8s1ZH_H15_jIEA2GDgmWwwx_fedcp-hY88ixm1nRc/edit) and the documentation and examples for each function in the package.
+Tutorial.Rmd guides the user through how to use the build up and transient mass balance methods on simulated and real data. Please also see the final report(https://docs.google.com/document/d/1MH8s1ZH_H15_jIEA2GDgmWwwx_fedcp-hY88ixm1nRc/edit) and the documentation and examples for each function in the package for more details. 
