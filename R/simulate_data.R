@@ -37,16 +37,6 @@ simulate_data <- function(persondata, volume, ventilation_rate, envCO2=400, star
   ### Simulate CO2 concentration ###
   # Equation: dC/dt = (N*CO2rate + (envCO2-CO2)*ventilation_rate)/volume
 
-  # Convert from ppm to ug/m^3
-  ppm_to_ug <- function(ppm, temp){
-    ppm / 44.01 * 8314 * (273.15+temp) / 1000 / 101.325
-  }
-
-  # convert from ug/m^3 to ppm
-  ug_to_ppm <- function(ug, temp) {
-    ug * 44.01 * 1000 * 101.325 / 8314 / (273.15+temp)
-  }
-
   startCO2 <- ppm_to_ug(startCO2, temp)
   envCO2 <- ppm_to_ug(envCO2, temp)
 

@@ -99,14 +99,12 @@ persondata_to_emission <- function(persondata, temp=25, freq){
 
 
   # some unit conversions
-  # CO2rate adjusted to room temperature and convert to ug/s
+  # CO2rate adjusted to room temperature and convert to mg/s
   # my reference CO2rates are in L/s at 0C (much lower than room temp)
-  # first I need to convert to CO2rate at room temp, then convert from L/s to ug/s
-  # note: the density of CO2 at room temp is 1.98 g/L
-  # note: the density of CO2 at 0C in moles is .0446 mol/L (1.965/molar mass)
-  # CO2rate_roomtemp = CO2rate*.046 * R * T / P
-  # COrate_ug = CO2rate_roomtemp * 1.98 * 1e6
-  persondata$adj_CO2rate <- persondata$CO2rate * 1.965 * .0446 * (8.314*(273.15+temp)/101.325) * 1e6
+  # CO2rate (mg/s) = CO2rate (L/s) * (273.15+temp)/273.15) * 101.325/((8.314)*(273.15 + temp)) * 44.009 * 1e3
+  #persondata$adj_CO2rate <- persondata$CO2rate * 1.965 * .0446 * (8.314*(273.15+temp)/101.325) * 1e6
+  #persondata$adj_CO2rate <- (persondata$CO2rate * (273.15+temp)/273.15) * 101.325/((8.314)*(273.15 + temp)) * 44.009 * 1e6
+  persondata$adj_CO2rate <- (persondata$CO2rate * (273.15+temp)/273.15) * 101.325/((8.314)*(273.15 + temp)) * 44.009 * 1e3
 
   # create time and n*CO2rate vectors
   times = seq(min(as.numeric(persondata$time)),

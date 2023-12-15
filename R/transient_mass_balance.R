@@ -11,12 +11,12 @@
 #' @param method 'NR' (Newton Raphson) for 1D optimization; 'Newton', 'L-BFGS-B', 'Nelder-Mead' for multidimensional optimization
 #' @param max.iter Maximum number of iterations for Newton methods
 #' @param tol Tolerance for Newton methods
-#' @param E.init initial guess for emission rates in micrograms/s (must be the length of critpoints + 1)
+#' @param E.init initial guess for emission rates in milligrams/s (must be the length of critpoints + 1)
 #' @param envCO2.init initial guess for environmental CO2 concentration in ppm
 #' @param envCO2LB for L-BFGS-B, lower bound for environmental CO2 concentration in ppm
 #' @param envCO2UB for L-BFGS-B, upper bound for environmental CO2 concentration in ppm
-#' @param ELB for L-BFGS-B, lower bound for emission rates in micrograms/s
-#' @param EUB for L-BFGS-B, upper bound for emission rates in micrograms/s
+#' @param ELB for L-BFGS-B, lower bound for emission rates in milligrams/s
+#' @param EUB for L-BFGS-B, upper bound for emission rates in milligrams/s
 #' @param QLB for L-BFGS-B, lower bound for ventilation rate in m^3/s
 #' @param QUB for L-BFGS-B, upper bound for ventilation rate in m^3/s
 #' @param verbose
@@ -24,7 +24,7 @@
 #'
 #' @return list with elements: Q (ventilation rate in m^3/s),
 #' ACH (ventilation rate in 1/h),
-#' E (emission rates in micrograms/s) if estimated,
+#' E (emission rates in milligrams/s) if estimated,
 #' f (value of sum of squares at convergence),
 #' envCO2 (environmental CO2 concentration in ppm) if estimated,
 #' iter (number of iterations),
@@ -50,7 +50,7 @@ transient_mass_balance <- function(freq,
                                  envCO2LB = 375, # use with LBFGSB
                                  envCO2UB = 425, # use with LBFGSB
                                  ELB = 0, # use with LBFGSB
-                                 EUB = 50, # use with LBFGSB
+                                 EUB = 1e3, # use with LBFGSB
                                  QLB = 0.001, # use with LBFGSB
                                  QUB = 10, # use with LBFGSB
                                  verbose=FALSE, record.steps=FALSE) {
@@ -78,25 +78,14 @@ transient_mass_balance <- function(freq,
     nadj_CO2rate <- nadj_CO2rate[1:length(CO2)]
   }
 
-  # Convert from ppm to ug/m^3
-  ppm_to_ug <- function(ppm, temp){
-    ppm / 44.01 * 8314 * (273.15+temp) / 1000 / 101.325
-  }
-
-  # convert from ug/m^3 to ppm
-  ug_to_ppm <- function(ug, temp) {
-    ug * 44.01 * 1000 * 101.325 / 8314 / (273.15+temp)
-  }
-
-
   if(!is.null(envCO2known)){
-    envCO2known <- ppm_to_ug(envCO2known, temp)
+    envCO2known <- ppm_to_mg(envCO2known, temp)
   }else{
-    envCO2.init <- ppm_to_ug(envCO2.init, temp)
+    envCO2.init <- ppm_to_mg(envCO2.init, temp)
   }
-  CO2 <- ppm_to_ug(CO2, temp)
-  envCO2LB <- ppm_to_ug(envCO2LB, temp)
-  envCO2UB <- ppm_to_ug(envCO2UB, temp)
+  CO2 <- ppm_to_mg(CO2, temp)
+  envCO2LB <- ppm_to_mg(envCO2LB, temp)
+  envCO2UB <- ppm_to_mg(envCO2UB, temp)
 
   # # Gradient descent
   #   Q = init.Q
@@ -327,7 +316,7 @@ transient_mass_balance <- function(freq,
       my_ret$E = ret$par[2:(length(Eindices)+1)]
     }
     if(estimate_envCO2){
-      my_ret$envCO2 = ug_to_ppm(ret$par[length(ret$par)], temp)
+      my_ret$envCO2 = mg_to_ppm(ret$par[length(ret$par)], temp)
     }
     return(my_ret)
   }
@@ -417,7 +406,7 @@ transient_mass_balance <- function(freq,
         my_ret$E = ret$par[2:(length(Eindices)+1)]
       }
       if(estimate_envCO2){
-        my_ret$envCO2 = ug_to_ppm(ret$par[length(ret$par)], temp)
+        my_ret$envCO2 = mg_to_ppm(ret$par[length(ret$par)], temp)
       }
       return(my_ret)
     }
@@ -425,11 +414,6 @@ transient_mass_balance <- function(freq,
 
 multi_Newton <- function(persondata, max.iter, tol, verbose, record.steps, critpoints,
                          nadj_CO2rate, CO2, init.Q, envCO2known, E.init, envCO2.init, freq, temp){
-  # convert from ug/m^3 to ppm
-  ug_to_ppm <- function(ug, temp) {
-    ug * 44.01 * 1000 * 101.325 / 8314 / (273.15+temp)
-  }
-
   param_setup <- multidimensional_param_setup(CO2=CO2,
                                               persondata=persondata,
                                               critpoints=critpoints,
@@ -599,7 +583,7 @@ multi_Newton <- function(persondata, max.iter, tol, verbose, record.steps, critp
       }
       print(paste("Iter:",iter,
                   "Q:", Q,
-                  "envCO2:", ug_to_ppm(envCO2, temp),
+                  "envCO2:", mg_to_ppm(envCO2, temp),
                   "f:",f1,
                   "sum_delta:", sum(delta)))
       print(Es)
@@ -610,7 +594,7 @@ multi_Newton <- function(persondata, max.iter, tol, verbose, record.steps, critp
         index = Eindices[[i]]
         Etemp[i] = E[index[1]]
       }
-      steps[iter,] <- c(iter, Q, ug_to_ppm(envCO2, temp), f1, sum(delta), Etemp)
+      steps[iter,] <- c(iter, Q, mg_to_ppm(envCO2, temp), f1, sum(delta), Etemp)
 
     }
     #if(abs(f1-f0)<=tol*(abs(f1)+abs(f0))){
@@ -626,7 +610,7 @@ multi_Newton <- function(persondata, max.iter, tol, verbose, record.steps, critp
     return(list(ventilation = Q,
                 ACH = Q/volume*3600,
                 E = E,
-                envCO2 = ug_to_ppm(envCO2, temp),
+                envCO2 = mg_to_ppm(envCO2, temp),
                 f=f1,
                 iter=iter,
                 convergence=convergence,
@@ -635,7 +619,7 @@ multi_Newton <- function(persondata, max.iter, tol, verbose, record.steps, critp
     return( list(ventilation = Q,
                  ACH = Q/volume*3600,
                  E = E,
-                 envCO2 = ug_to_ppm(envCO2, temp),
+                 envCO2 = mg_to_ppm(envCO2, temp),
                  f=f1,
                  iter=iter,
                  convergence=convergence))
@@ -696,7 +680,7 @@ multidimensional_param_setup <- function(CO2,
     if(!is.null(envCO2.init)){
       envCO2 = envCO2.init
     } else {
-      envCO2 = 222 # 400 ppm in ug
+      envCO2 = 222 # 400 ppm in mg
     }
   } else {
     envCO2 = envCO2known
