@@ -2,7 +2,7 @@
 % Please edit documentation in R/CO2rate_to_Gp.R
 \name{CO2rate_to_Gp}
 \alias{CO2rate_to_Gp}
-\title{Convert CO2 emission rates (in micrograms/s) to Gp (in L/min)}
+\title{Convert CO2 emission rates (in milligrams/s) to Gp (in L/min)}
 \usage{
 CO2rate_to_Gp(CO2rate, temp = 25)
 }
@@ -13,5 +13,5 @@ CO2rate_to_Gp(CO2rate, temp = 25)
 Gp
 }
 \description{
-Convert CO2 emission rates (in micrograms/s) to Gp (in L/min)
+Convert CO2 emission rates (in milligrams/s) to Gp (in L/min)
 }

@@ -37,8 +37,8 @@ simulate_data <- function(persondata, volume, ventilation_rate, envCO2=400, star
   ### Simulate CO2 concentration ###
   # Equation: dC/dt = (N*CO2rate + (envCO2-CO2)*ventilation_rate)/volume
 
-  startCO2 <- ppm_to_ug(startCO2, temp)
-  envCO2 <- ppm_to_ug(envCO2, temp)
+  startCO2 <- ppm_to_mg(startCO2, temp)
+  envCO2 <- ppm_to_mg(envCO2, temp)
 
   errors = rnorm(length(times), 0, sqrt(CO2var))
 
@@ -103,7 +103,7 @@ simulate_data <- function(persondata, volume, ventilation_rate, envCO2=400, star
     }
   }
 
-  ret = data.frame('time' = times, 'CO2' = ug_to_ppm(CO2, temp))
+  ret = data.frame('time' = times, 'CO2' = mg_to_ppm(CO2, temp))
   return(ret)
 }
 

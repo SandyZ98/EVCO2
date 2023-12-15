@@ -21,7 +21,7 @@ transient_mass_balance(
   envCO2LB = 375,
   envCO2UB = 425,
   ELB = 0,
-  EUB = 50,
+  EUB = 1000,
   QLB = 0.001,
   QUB = 10,
   verbose = FALSE,
@@ -51,7 +51,7 @@ transient_mass_balance(
 
 \item{tol}{Tolerance for Newton methods}
 
-\item{E.init}{initial guess for emission rates in micrograms/s (must be the length of critpoints + 1)}
+\item{E.init}{initial guess for emission rates in milligrams/s (must be the length of critpoints + 1)}
 
 \item{envCO2.init}{initial guess for environmental CO2 concentration in ppm}
 
@@ -59,9 +59,9 @@ transient_mass_balance(
 
 \item{envCO2UB}{for L-BFGS-B, upper bound for environmental CO2 concentration in ppm}
 
-\item{ELB}{for L-BFGS-B, lower bound for emission rates in micrograms/s}
+\item{ELB}{for L-BFGS-B, lower bound for emission rates in milligrams/s}
 
-\item{EUB}{for L-BFGS-B, upper bound for emission rates in micrograms/s}
+\item{EUB}{for L-BFGS-B, upper bound for emission rates in milligrams/s}
 
 \item{QLB}{for L-BFGS-B, lower bound for ventilation rate in m^3/s}
 
@@ -72,7 +72,7 @@ transient_mass_balance(
 \value{
 list with elements: Q (ventilation rate in m^3/s),
 ACH (ventilation rate in 1/h),
-E (emission rates in micrograms/s) if estimated,
+E (emission rates in milligrams/s) if estimated,
 f (value of sum of squares at convergence),
 envCO2 (environmental CO2 concentration in ppm) if estimated,
 iter (number of iterations),

@@ -15,8 +15,7 @@ library(ggplot2)
 
 ## Example data
 
-some description of the example data...
-note, it is loaded with package
+We will start by loading example data collected at the University of Michigan over a 55 hour period. 
 
 ```{r}
 head(example_data)
@@ -36,6 +35,8 @@ ggplot(data=data.frame(times=times, CO2=CO2), aes(x=times, y=CO2)) +
 
 
 ### Transient Mass Balance Method 
+
+Let's first try estimating ventilation rates using the transient mass balance method, which is implemented in the `transient_mass_balance` function.
 
 We will assume that 5 people enter the room at 9 am and then leave at 5 pm each day. We first need to find the indices that correspond to these times, and then compute the number of hours since the start of data collection at each of these times.
 
@@ -132,7 +133,7 @@ transient_mass_balance(freq=freq,
 
 If we do not trust our occupancy patterns, we can also estimate ventilation rates rather than use `ex_persondata`. We will provide a vector of indices at which the estimated CO2 emission rate should be allowed to vary. For example, if we assume the occupancy changes at 9 am and 5 pm, we can use these as "critical points" for the estimated CO2 emission rates. 
 
-With the 'L-BFGS-B' method, we can also provide bounds on the estimated parameters. For example, we can assume that the CO2 emission rates (in milligrams/s) are between 0 and 25. By default, environmental CO2 is bounded between 375 and 425 ppm.
+With the 'L-BFGS-B' method, we can also provide bounds on the estimated parameters. For example, we can assume that the CO2 emission rates (in milligrams/s) are between 0 and 100. By default, environmental CO2 is bounded between 375 and 425 ppm.
 
 ```{r}
 # Try using the L-BFGS-B method
@@ -144,7 +145,7 @@ transient_mass_balance(freq=freq,
                        init.Q = 1,
                        temp=temp,
                        ELB = 0,
-                       EUB = 25,
+                       EUB = 100,
                        envCO2LB = 380,
                        envCO2UB = 420,
                        critpoints=c(ind0, ind1, ind2, ind3, ind4),
@@ -410,7 +411,7 @@ transient_mass_balance(freq=freq,
                        init.Q = .5,
                        temp=temp,
                        ELB = 0,
-                       EUB = Inf,
+                       EUB = 100,
                        envCO2LB = 380,
                        envCO2UB = 420,
                        critpoints= c(ind0, ind1, ind2, ind3, ind4),
