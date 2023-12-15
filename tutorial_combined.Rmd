@@ -442,3 +442,108 @@ sim_bumain_output = build_up_main(simdat$POSIXtime, simdat$CO2, aer = NA, n = n_
 sim_bumain_output
 ```
 
+## Comparison with existing methods
+
+###Build Up Method
+
+The functions `optim` and `optimize` can be used for single dimensional optimization. These functions can either minimize or maximize an objective function. To use these for estimating the air exchange rate using the build up method, we will optimize the square of `build_up`. However, there are some problems
+
+First, the build up equation will always be equal to zero when the air exchange rate is zero. Thus, there will always be a root at aer = 0. When calling optim / optimize, one must set a lower bound that is not zero. However, not all lower bounds will allow for convergence (depending on the method).
+
+Currently, we have no guidance for setting this lower bound. The user would have to iteratively check to make sure that the root returned by the optimization methods are not equal to the lower bound. If this is true, a larger lower bound would need to be input.
+
+Additionally, the methods are senstiive to the initial parameter estimate to be input. Similarly to `build_up_starter`, we recommend using the value of the asymptote, or a value slightly lower than the asymptote, for the starting value. For methods such as "L-BFGS-B", finite values or required, so one can not use the asymptote directly.
+
+The upper estimate only needs to be large. A value of 100 will normally be sufficient, but if the expected air exchange rate is large, this value can always be increased.
+
+Properly constrained optim / optimize methods return the same estimates as the implementation of the build up method in this package. While optim / optimize can be used, the EVCO2 implementation prevents having to worry about specifying a correct lower bound, starting position, or upper bound.
+
+```{r}
+#Lets compare our results to that of optim
+
+#recall: 
+
+n = 5 #number of people
+Gp = Gp_rate(16/24) #CO2 generation rate, L / min / person
+room_volume = 226.6746 #meters cubed
+
+#Lets grab the row index of the first exponential growth period from periods
+index_val = which(periods$Type == "Growth")[1]
+
+#We can then calculate:
+
+C0 = CO2[periods[index_val,1]] #initial CO2 concentration
+t0 = periods[index_val,4] #initial time
+C1 = CO2[periods[index_val,2]] #final CO2 concentration
+t1 = periods[index_val,5] #final time
+
+#get our delta time value for the same indexes
+delta_t = as.numeric(difftime(t1,t0), units = "hours") #time difference
+
+#Now, we need to determine the starting points for the secant method. We can do this by calling build_up_starter().
+#We input NA for the variable we want to estimate, and fill in the rest of the arguments. By default Cr, the replacement air CO2 concentration, is 400.
+
+bum_output = build_up_method(aer = NA, n = n, Gp = Gp, V = room_volume, C0 = C0, C1 = C1, delta_t, Cr = 400, tol=1e-10, max_iter=1000)
+
+aer_est = bum_output$root
+
+cat("EVCO2 AER estimate:")
+aer_est
+
+
+#Now, lets see what we get from calling optim. We will optimize the square of the build_up() function
+
+
+bup_sq = function(aer, n, Gp, V, C0, C1, delta_t, Cr = 400){
+  val = build_up(aer, n, Gp, V, C0, C1, delta_t, Cr)
+  return(val^2)
+}
+
+
+#Some of these methods only require one starting point. Some require none. We can let this starting point be the value of the asymptote of the function when required. Alternatively, one can call build_up_starter() with the appropriate inputs to
+#calculate the asymptote
+rec_start = 6e4*n*Gp/(room_volume*C1*(1 - envCO2/C1))
+#rec_start = build_up_starter(NA, n, Gp, room_volume, C0, C1, delta_t, envCO2)$asymptote
+
+
+
+cat("\nAsymptote value:")
+unlist(rec_start)
+
+#Start with lower bound of 0
+
+optim_brent = optim(rec_start, fn = bup_sq, n = n, Gp = Gp, V = room_volume, C0 = C0, C1 = C1, delta_t = delta_t, Cr = envCO2, method = 'Brent', lower = 1e-10, upper = 100)
+
+#For "L-BFGS-B" finite values are required, so we subtract a value of 0.1
+optim_LBFGSB = optim(rec_start - 0.1, fn = bup_sq, n = n, Gp = Gp, V = room_volume, C0 = C0, C1 = C1, delta_t = delta_t, Cr = envCO2, method = "L-BFGS-B", lower = 1e-10, upper = 100)
+
+optimize_output = optimize(bup_sq, c(1e-10,100),  n = n, Gp = Gp, V = room_volume, C0 = C0, C1 = C1, delta_t = delta_t, Cr = envCO2)
+
+
+#Lets change the lower bound to 1
+
+optim_brent_1 = optim(rec_start, fn = bup_sq, n = n, Gp = Gp, V = room_volume, C0 = C0, C1 = C1, delta_t = delta_t, Cr = envCO2, method = 'Brent', lower = 1, upper = 100)
+
+optim_LBFGSB_1 = optim(rec_start - 0.1, fn = bup_sq, n = n, Gp = Gp, V = room_volume, C0 = C0, C1 = C1, delta_t = delta_t, Cr = envCO2, method = "L-BFGS-B", lower = 1, upper = 100)
+
+optimize_output_1 = optimize(bup_sq, c(1,100),  n = n, Gp = Gp, V = room_volume, C0 = C0, C1 = C1, delta_t = delta_t, Cr = envCO2)
+
+
+#lets build a data frame to display our output
+
+optim_df = data.frame(Method = c("optim : Brent", "optim : L-BFGS-B", "optimize"),
+                      `Lower Bound of 1e-10` = c(optim_brent$par, optim_LBFGSB$par, optimize_output$minimum),
+                      `Lower Bound of 1` = c(optim_brent_1$par, optim_LBFGSB_1$par, optimize_output_1$minimum),
+                      `LB1 difference from EVCO2 estimate` = c(optim_brent_1$par, optim_LBFGSB_1$par, optimize_output_1$minimum) - aer_est)
+
+colnames(optim_df) = c("Method","Lower Bound of 1e-10","Lower Bound of 1", "LB1 difference from EVCO2 estimate")
+
+optim_df
+
+
+```
+
+
+
+
+
