@@ -1,0 +1,550 @@
+---
+title: "EVCO2 Tutorial"
+date: "2023-12-13"
+output:
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(EVCO2)
+library(ggplot2)
+```
+
+# EVCO2 Tutorial - Estimating ventilation rates from CO2 time series data
+
+## Example data
+
+We will start by loading example data collected at the University of Michigan over a 55 hour period. 
+
+```{r}
+head(example_data)
+
+
+times = example_data$`Time(dd/mm/yyyy)`
+times = as.POSIXct(times, format = "%d/%m/%Y %I:%M:%S %p")
+CO2 = example_data$`Carbon dioxide(ppm)`
+
+# Plotting the time series data
+ggplot(data=data.frame(times=times, CO2=CO2), aes(x=times, y=CO2)) + 
+  geom_point() + 
+  geom_line() + 
+  labs(x="Time", y="CO2 (ppm)") + theme_bw() 
+
+```
+
+
+### Transient Mass Balance Method 
+
+Let's first try estimating ventilation rates using the transient mass balance method, which is implemented in the `transient_mass_balance` function.
+
+We will assume that 5 people enter the room at 9 am and then leave at 5 pm each day. We first need to find the indices that correspond to these times, and then compute the number of hours since the start of data collection at each of these times.
+
+```{r}
+ind0 <- which(times == "2023-11-13 18:01:35 EST") # people leave for the day
+ind1 <- which(times == "2023-11-14 8:01:36 EST") # people come in
+ind2 <- which(times == "2023-11-14 18:01:36 EST") # people leave
+ind3 <- which(times == "2023-11-15 8:01:35 EST") # people come in
+ind4 <- which(times == "2023-11-15 18:01:35 EST") # people leave
+
+hr0 <- as.numeric(difftime(times[ind0], times[1], units = "hours"))
+hr1 <- as.numeric(difftime(times[ind1], times[1], units = "hours"))
+hr2 <- as.numeric(difftime(times[ind2], times[1], units = "hours"))
+hr3 <- as.numeric(difftime(times[ind3], times[1], units = "hours"))
+hr4 <- as.numeric(difftime(times[ind4], times[1], units = "hours"))
+end <- as.numeric(difftime(times[length(times)], times[1], units = "hours"))
+```
+
+Using this information, we can create a small data frame `ex_persondata` describing the occupancy pattern in the room over the time period during which the data were collected.
+
+`time` is the time in hours since the start of data collection, and `n` is the number of people in the room at that time. `CO2rate` is the CO2 generation rate of each person in milligrams/s. We need to include the start and end times in this data frame, and we will assume that there are 5 people in the room at the start of data collection.
+
+```{r}
+# get Gp rate from respiratory rate based on EPA exposures handbook
+Gp = Gp_rate(16/24) 
+# transient mass balance method uses CO2rate in L/s at 0C, so we need to convert:
+# first convert L to mol, then use ideal gas law to convert to 0C
+# divide by 60 to convert from L/min to L/s
+CO2rate = Gp * .0446 * (8.314*273.15/101.325) / 60
+
+# create persondata dataframe
+ex_persondata <- data.frame(
+  time = c(0, hr0, hr1, hr2, hr3, hr4, end+.02), # include small offset at end
+  n = c(5, 0, 5, 0, 5, 0, 0),
+  CO2rate = c(CO2rate, 0, CO2rate, 0, CO2rate, 0, 0)
+  )
+```
+
+We need to set a few more parameters, and then we can estimate ventilation rate using the transient mass balance method.
+
+```{r}
+# volume is based on measurements of the room and should be in m^3
+volume = .0254^3*321*378*114
+# environmental CO2 concentration in ppm
+envCO2 = 400 
+# room temperature in degrees Celsius
+temp = 25
+# freq is time step between measurements
+# note, measurements are equally spaced
+freq = as.numeric(difftime(times[2], times[1], units = "secs"))
+```
+
+Now we can estimate the ventilation rate using the 1D optimization algorithm implemented in the `transient_mass_balance` function. The function returns a list containing the estimated ventilation rate in m^3/s and in air exchanges per hour (ACH), as well as the value of the objective function being minimized at the estimated ventilation rate, the number of iterations, and a convergence code (0 indicates convergence).
+
+
+```{r}
+transient_mass_balance(freq=freq,
+                       CO2=CO2,
+                       envCO2known=envCO2,
+                       volume=volume,
+                       init.Q = 1,
+                       temp=temp,
+                       persondata=ex_persondata,
+                       method='NR')
+```
+Suppose we aren't very confident that the environmental CO2 estimate is correct. We can also estimate the environmental CO2 concentration using the `transient_mass_balance` function. We just need to set `envCO2known = NULL` and provide an initial guess for the environmental CO2 concentration.
+
+```{r}
+# Try using the L-BFGS-B method 
+transient_mass_balance(freq=freq,
+                       CO2=CO2,
+                       envCO2known=NULL,
+                       envCO2.init=400,
+                       volume=volume,
+                       init.Q = 1,
+                       temp=temp,
+                       persondata=ex_persondata,
+                       method='L-BFGS-B')
+
+# Try using the Nelder-Mead method
+# in this case, they converge to the same solution
+transient_mass_balance(freq=freq,
+                       CO2=CO2,
+                       envCO2known=NULL,
+                       envCO2.init=400,
+                       volume=volume,
+                       init.Q = 1,
+                       temp=temp,
+                       persondata=ex_persondata,
+                       method='Nelder-Mead')
+
+
+```
+
+If we do not trust our occupancy patterns, we can also estimate ventilation rates rather than use `ex_persondata`. We will provide a vector of indices at which the estimated CO2 emission rate should be allowed to vary. For example, if we assume the occupancy changes at 9 am and 5 pm, we can use these as "critical points" for the estimated CO2 emission rates. 
+
+With the 'L-BFGS-B' method, we can also provide bounds on the estimated parameters. For example, we can assume that the CO2 emission rates (in milligrams/s) are between 0 and 100. By default, environmental CO2 is bounded between 375 and 425 ppm.
+
+```{r}
+# Try using the L-BFGS-B method
+# We can provide bounds on any of the estimated parameters
+transient_mass_balance(freq=freq,
+                       CO2=CO2,
+                       envCO2.init=400,
+                       volume=volume,
+                       init.Q = 1,
+                       temp=temp,
+                       ELB = 0,
+                       EUB = 100,
+                       envCO2LB = 380,
+                       envCO2UB = 420,
+                       critpoints=c(ind0, ind1, ind2, ind3, ind4),
+                       method='L-BFGS-B')
+
+# Try using the Nelder-Mead method
+transient_mass_balance(freq=freq,
+                       CO2=CO2,
+                       envCO2.init=400,
+                       volume=volume,
+                       init.Q = 1,
+                       temp=temp,
+                       critpoints=c(ind0, ind1, ind2, ind3, ind4),
+                       method='Nelder-Mead')
+```
+
+
+### Build Up Method 
+
+We can alternatively solve for the Air Exchange Rate using the build up method. The implementation in this package uses the secant method to solve the `build_up` function, which contains the build up equation whose root will be solved for.
+This process involves identifying periods of exponential growth, identifying appropriate starting points for the secant method, and solving for the roots of the `build_up` function using the secant method.
+
+Additionally, implementation of this method allows for solving of average number of individuals in the room, room volume, and CO2 generation rate (L / min / person). However, the implementation is one dimensional - the build up method as implemented in this backage only solves roots in one dimension / can only solve when one variable (AER, n, Gp, V) is unknown.
+
+```{r, warning=FALSE, message=FALSE}
+
+#The first thing that must be done is to select regions of exponential growth. If this is not known, the exp_periods() function can be ran to estimate regions of exponential activity. This function has two required arguments. The first argument is the vector of times in POSIXct format. To avoid errors, ensure the passed time list inherits the POSIXct attribute. The second is the vector of CO2 values. The third argument, quant_cutoff, is not required. This argument ranges from 0 to 1 and represents how selective the algorithm is in choosing regions of exponential growth. 0 is the least selective, and 1 is the most selective. Default value is 0.9. 
+
+periods = exp_periods(times, CO2)
+
+periods_3q = exp_periods(times, CO2, quant_cutoff = 0.75)
+
+periods_half = exp_periods(times, CO2, quant_cutoff = 0.5)
+
+periods_1q = exp_periods(times, CO2, quant_cutoff = 0.25)
+
+periods_zero = exp_periods(times, CO2, quant_cutoff = 0)
+
+#Lets look at how the outputs differ
+
+periods
+periods_3q
+periods_half
+periods_1q
+periods_zero
+
+#As the cutoff decreases, more and more regions will be tagged as exponential growth. However, at cutoff of 0,
+#the entire time series data is considered to be an exponential region. Note that this algorithm does not necessarily
+#capture the beginning and end of each region, but instead tries to obtain two points that occur within any given identified region. Interval P Size is required for some calculations in other functions.
+```
+
+
+Now that we identified regions of exponential growth and decay, lets try solving for parameters using the secant method!
+Remember, this method only works for regions of exponential growth. Additionally, it's important to keep in mind that
+estimates may be inflated or nonsensical if the points used are both in the very beginning of the exponential growth
+phase. It may be necessary to manually check where exponential regions are defined if estimates are unreasonable.
+
+```{r}
+#Now, lets do an example for calculating the air exchange rate using one of the periods we just generated. We will assume the following parameters: Note that these are the same values used in the Transient Mass Balance method.
+
+n = 5 #number of people
+Gp = Gp_rate(16/24) #CO2 generation rate, L / min / person
+room_volume = 226.6746 #meters cubed
+
+#Lets grab the row index of the first exponential growth period from periods
+index_val = which(periods$Type == "Growth")[1]
+
+#We can then calculate:
+
+C0 = CO2[periods[index_val,1]] #initial CO2 concentration
+t0 = periods[index_val,4] #initial time
+C1 = CO2[periods[index_val,2]] #final CO2 concentration
+t1 = periods[index_val,5] #final time
+
+#get our delta time value for the same indexes
+delta_t = as.numeric(difftime(t1,t0), units = "hours") #time difference
+
+#Now, we need to determine the starting points for the secant method. We can do this by calling build_up_starter().
+#We input NA for the variable we want to estimate, and fill in the rest of the arguments. By default Cr, the replacement air CO2 concentration, is 400.
+
+bus_output = build_up_starter(aer = NA, n = n, Gp = Gp, V = room_volume, C0 = C0, C1 = C1, delta_t, Cr = envCO2)
+
+#Lets display the output
+bus_output
+
+
+#Start and Stop are the two starting values to be input into the secant method algorithm to solve for the root of the build_up() equation. Asymptote is the location of the asymptote of the function, and is returned as diagnostic information.
+
+#Now that we have our initial starting points, we can solve using the secant method! To do this we call the bulid_up_method function. Note that this function will call build_up_starter inside of it, so we do not have to pass that information to the function. tol and max_iter determine convergence tolerance and maximum number of iterations for the method to attempt.
+
+bum_output = build_up_method(aer = NA, n = n, Gp = Gp, V = room_volume, C0 = C0, C1 = C1, delta_t, Cr = envCO2, tol=1e-10, max_iter=1000)
+
+#Lets display the output
+bum_output
+
+
+#The root value that is returned is the estimated value of the air exchange rate. f_root is the value of the build up method at root. iter returns the number of iterations before convergence. convergence is either a value of 0 or 1. 0 indicates that convergence was achieved. 1 indicates that convergence was not achieved within the maximum number of iterations.
+
+#What is important to note is that this method can be used to estimate the other parameters! Lets input our estimated air exchange rate back into the method and try and re-estimate known parameters.
+
+aer_est = bum_output$root
+
+n_est = build_up_method(aer = aer_est, n = NA, Gp = Gp, V = room_volume, C0 = C0, C1 = C1, delta_t, Cr = envCO2, tol=1e-10, max_iter=1000)$root
+
+Gp_est = build_up_method(aer = aer_est, n = n, Gp = NA, V = room_volume, C0 = C0, C1 = C1, delta_t, Cr = envCO2, tol=1e-10, max_iter=1000)$root
+
+V_est = build_up_method(aer = aer_est, n = n, Gp = Gp, V = NA, C0 = C0, C1 = C1, delta_t, Cr = envCO2, tol=1e-10, max_iter=1000)$root
+
+#Lets see if we get back our initial values!
+
+cat("n estimate = ", n_est, "\n", 
+    "Gp estimate = ", Gp_est, "\n",
+    "Volume estimate = ", V_est, "\n",
+    "\nn initial = ", n, "\n", 
+    "Gp initial = ", Gp, "\n",
+    "Volume initial = ", room_volume, sep = "")
+
+#As one would expect, we obtain our initial parameters back when estimating with our calculated air exchange rate
+```
+
+
+We don't want to just estimate parameters for one of the exponential growth regions - we want to estimate for all of the regions! The `build_up_main` function combines all of the previous build up functions to automatically locate regions of exponential growth and return parameter estimates. 
+
+Like the previous `build_up_method` function, `bulid_up_main` can solve for AER, n, Gp, and V; `build_up_main` is still one dimensional, however it will provide estimates of the raw and interval-averaged (smoothed) CO2 values. This can be helpful if CO2 ranges are small compared to sensor error, as the interval_averaged CO2 values will likely have less variability of estimates in this situation.
+
+```{r}
+#Now that we know how the secant method works for solving the build_up() equation, lets look at how the build_up_main function works. This method will calculate estimates for every exponential growth period determined by the exp_periods() function. However, we need to obtain the times at which people are and are not in the room. We will assume that there are 5 individuals in the room between 9am and 5pm, and that there are 0 people in the room otherwise.
+
+n_change = c(times[1],
+             as.POSIXct("13/11/2023 5:00:00 PM", format = "%j/%m/%Y %I:%M:%S %p", tz = 'est'),
+             as.POSIXct("14/11/2023 9:00:00 AM", format = "%j/%m/%Y %I:%M:%S %p", tz = 'est'),
+             as.POSIXct("14/11/2023 5:00:00 PM", format = "%j/%m/%Y %I:%M:%S %p", tz = 'est'),
+             as.POSIXct("15/11/2023 9:00:00 AM", format = "%j/%m/%Y %I:%M:%S %p", tz = 'est'),
+             as.POSIXct("15/11/2023 5:00:00 PM", format = "%j/%m/%Y %I:%M:%S %p", tz = 'est'))
+
+#We will have to change the input argument of our n value. Because n changes over time, we must input n as a matrix. For other parameters, if they change over time, their format may vary. See the documentation of build_up_main for more information. Additionally, build_up_main will return error messages / warnings when data is input incorrectly.
+
+n_mat = matrix(c(5,0,5,0,5,0),6,1)
+
+
+bumain_output = build_up_main(times, CO2, aer = NA, n = n_mat, Gp = rep(Gp,6), V = rep(room_volume,6), n_change = n_change, quant_cutoff = 0.9, Cr = envCO2, tol=1e-10, max_iter=1000)
+
+bumain_output
+
+#Notice that some warning outputs were generated. This occurs whenever a period had to be skipped due to computation errors. All skipped periods are placed into removed_periods. Other return values give estimates either using raw or p-interval averaged CO2 values. The data frames contain more diagnostic data related to the entirety of the methods used for calculation.
+
+
+#We can additionally use this function to estimate other parameters as well! We can do as we have done previously:
+
+bumain_output_n = build_up_main(times, CO2, aer = aer_est, n = NA, Gp = Gp, V = room_volume, n_change = n_change, quant_cutoff = 0.9, Cr = envCO2, tol=1e-10, max_iter=1000)
+
+bumain_output_Gp = build_up_main(times, CO2, aer = rep(aer_est,6), n = n_mat, Gp = NA, V = rep(room_volume,6), n_change = n_change, quant_cutoff = 0.9, Cr = envCO2, tol=1e-10, max_iter=1000)
+
+bumain_output_V = build_up_main(times, CO2, aer = rep(aer_est,6), n = n_mat, Gp = rep(Gp,6), V = NA, n_change = n_change, quant_cutoff = 0.9, Cr = envCO2, tol=1e-10, max_iter=1000)
+
+#Lets look at our output!
+bumain_output_n
+bumain_output_Gp
+bumain_output_V
+
+
+#Note that there is variability in the n estimate. This is because if we don't know the number of individuals in the room, then n_change will be ignored, and now previously removed periods will have non-zero inputs for non-estimated parameters.
+```
+
+
+
+## Simulating data
+
+We can simulate data for a given occupancy pattern, volume, ventilation rate, and environmental CO2 concentration using the `simulate_data` function. 
+
+Note, `simulate_data` may take longer to run on the first call. This is because it is compiling the C++ code used to simulate the data. Subsequent calls should be faster.
+
+For this example, we will use the same parameters that we used for our real data but we will assume that the ventilation rate is 6 ACH. 
+
+```{r} 
+# note, we need to convert ACH to m^3/s by multiplying by the volume and dividing by 3600
+# we will simulate data every second (freq = 1), but only keep every 120 seconds
+simdat <- simulate_data(freq=1,
+              volume=volume,
+              ventilation_rate = 6/3600*volume,
+              temp=temp,
+              persondata=ex_persondata,
+              envCO2=envCO2,
+              startCO2 = envCO2,
+              CO2var = .01,
+              method='Euler')
+keep_these <- seq(1, nrow(simdat), by=120)
+simdat <- simdat[keep_these,]
+simdat$POSIXtime = as.POSIXct(simdat$time*3600,
+                              origin = times[1])
+
+ggplot(data=simdat, aes(x=POSIXtime, y=CO2)) + 
+  geom_point() + 
+  geom_line() + 
+  labs(x="Time", y="CO2 (ppm)") + theme_bw() 
+
+```
+
+### Transient Mass Balance Method
+
+We can use `transient_mass_balance` to estimate the ventilation rate with the simulated data.
+
+```{r}
+transient_mass_balance(freq=freq,
+                       CO2=simdat$CO2,
+                       envCO2known=envCO2,
+                       volume=volume,
+                       init.Q = 1,
+                       temp=temp,
+                       persondata=ex_persondata,
+                       method='NR')
+# we get close to the true ventilation rate of 6 ACH
+```
+
+We can also assess how well the multidimensional optimization works if we assume envCO2 is unknown.
+
+```{r}
+# Newton's method
+transient_mass_balance(freq=freq,
+                       CO2=simdat$CO2,
+                       envCO2known=NULL,
+                       envCO2.init=415,
+                       volume=volume,
+                       init.Q = .5,
+                       temp=temp,
+                       persondata=ex_persondata,
+                       method='Newton')[c('ventilation', 'ACH', 'envCO2', 'f', 'iter', 'convergence')]
+
+# L-BFGS-B method
+transient_mass_balance(freq=freq,
+                       CO2=simdat$CO2,
+                       envCO2known=NULL,
+                       envCO2.init=415,
+                       volume=volume,
+                       init.Q = .5,
+                       temp=temp,
+                       persondata=ex_persondata,
+                       method='L-BFGS-B')
+
+# Nelder-Mead method
+transient_mass_balance(freq=freq,
+                       CO2=simdat$CO2,
+                       envCO2known=NULL,
+                       envCO2.init=415,
+                       volume=volume,
+                       init.Q = .5,
+                       temp=temp,
+                       persondata=ex_persondata,
+                       method='Nelder-Mead')
+
+```
+
+All three optimization methods get close to the true ventilation rate of 6 ACH and true environmental CO2 concentration of 400 ppm.
+
+Now we will try the same thing but assume that we do not know the exact occupancy pattern. 
+
+```{r}
+# Try using the L-BFGS-B method
+transient_mass_balance(freq=freq,
+                       CO2=simdat$CO2,
+                       envCO2.init=400,
+                       volume=volume,
+                       init.Q = .5,
+                       temp=temp,
+                       ELB = 0,
+                       EUB = 100,
+                       envCO2LB = 380,
+                       envCO2UB = 420,
+                       critpoints= c(ind0, ind1, ind2, ind3, ind4),
+                       method='L-BFGS-B')
+
+```
+
+### Build Up Method
+
+Unsuprisingly, we can also use the build up method on simulated data!
+
+```{r}
+#We don't need to actually change our n, Gp, volume, or n_change calls here. However, they will be re-initialized for clarity
+
+n_change = c(times[1],
+             as.POSIXct("13/11/2023 5:00:00 PM", format = "%j/%m/%Y %I:%M:%S %p", tz = 'est'),
+             as.POSIXct("14/11/2023 9:00:00 AM", format = "%j/%m/%Y %I:%M:%S %p", tz = 'est'),
+             as.POSIXct("14/11/2023 5:00:00 PM", format = "%j/%m/%Y %I:%M:%S %p", tz = 'est'),
+             as.POSIXct("15/11/2023 9:00:00 AM", format = "%j/%m/%Y %I:%M:%S %p", tz = 'est'),
+             as.POSIXct("15/11/2023 5:00:00 PM", format = "%j/%m/%Y %I:%M:%S %p", tz = 'est'))
+
+n_mat = matrix(c(5,0,5,0,5,0),6,1)
+
+Gp = Gp_rate(16/24) #CO2 generation rate, L / min / person
+room_volume = 226.6746 #meters cubed
+
+sim_bumain_output = build_up_main(simdat$POSIXtime, simdat$CO2, aer = NA, n = n_mat, Gp = rep(Gp,6), V = rep(room_volume,6), n_change = n_change, quant_cutoff = 0.9, Cr = 400, tol=1e-10, max_iter=1000)
+
+sim_bumain_output
+```
+
+## Comparison with existing methods
+
+###Build Up Method
+
+The functions `optim` and `optimize` can be used for single dimensional optimization. These functions can either minimize or maximize an objective function. To use these for estimating the air exchange rate using the build up method, we will optimize the square of `build_up`. However, there are some problems
+
+First, the build up equation will always be equal to zero when the air exchange rate is zero. Thus, there will always be a root at aer = 0. When calling optim / optimize, one must set a lower bound that is not zero. However, not all lower bounds will allow for convergence (depending on the method).
+
+Currently, we have no guidance for setting this lower bound. The user would have to iteratively check to make sure that the root returned by the optimization methods are not equal to the lower bound. If this is true, a larger lower bound would need to be input.
+
+Additionally, the methods are senstiive to the initial parameter estimate to be input. Similarly to `build_up_starter`, we recommend using the value of the asymptote, or a value slightly lower than the asymptote, for the starting value. For methods such as "L-BFGS-B", finite values or required, so one can not use the asymptote directly.
+
+The upper estimate only needs to be large. A value of 100 will normally be sufficient, but if the expected air exchange rate is large, this value can always be increased.
+
+Properly constrained optim / optimize methods return the same estimates as the implementation of the build up method in this package. While optim / optimize can be used, the EVCO2 implementation prevents having to worry about specifying a correct lower bound, starting position, or upper bound.
+
+```{r}
+#Lets compare our results to that of optim
+
+#recall: 
+
+n = 5 #number of people
+Gp = Gp_rate(16/24) #CO2 generation rate, L / min / person
+room_volume = 226.6746 #meters cubed
+
+#Lets grab the row index of the first exponential growth period from periods
+index_val = which(periods$Type == "Growth")[1]
+
+#We can then calculate:
+
+C0 = CO2[periods[index_val,1]] #initial CO2 concentration
+t0 = periods[index_val,4] #initial time
+C1 = CO2[periods[index_val,2]] #final CO2 concentration
+t1 = periods[index_val,5] #final time
+
+#get our delta time value for the same indexes
+delta_t = as.numeric(difftime(t1,t0), units = "hours") #time difference
+
+#Now, we need to determine the starting points for the secant method. We can do this by calling build_up_starter().
+#We input NA for the variable we want to estimate, and fill in the rest of the arguments. By default Cr, the replacement air CO2 concentration, is 400.
+
+bum_output = build_up_method(aer = NA, n = n, Gp = Gp, V = room_volume, C0 = C0, C1 = C1, delta_t, Cr = 400, tol=1e-10, max_iter=1000)
+
+aer_est = bum_output$root
+
+cat("EVCO2 AER estimate:")
+aer_est
+
+
+#Now, lets see what we get from calling optim. We will optimize the square of the build_up() function
+
+
+bup_sq = function(aer, n, Gp, V, C0, C1, delta_t, Cr = 400){
+  val = build_up(aer, n, Gp, V, C0, C1, delta_t, Cr)
+  return(val^2)
+}
+
+
+#Some of these methods only require one starting point. Some require none. We can let this starting point be the value of the asymptote of the function when required. Alternatively, one can call build_up_starter() with the appropriate inputs to
+#calculate the asymptote
+rec_start = 6e4*n*Gp/(room_volume*C1*(1 - envCO2/C1))
+#rec_start = build_up_starter(NA, n, Gp, room_volume, C0, C1, delta_t, envCO2)$asymptote
+
+
+
+cat("\nAsymptote value:")
+unlist(rec_start)
+
+#Start with lower bound of 0
+
+optim_brent = optim(rec_start, fn = bup_sq, n = n, Gp = Gp, V = room_volume, C0 = C0, C1 = C1, delta_t = delta_t, Cr = envCO2, method = 'Brent', lower = 1e-10, upper = 100)
+
+#For "L-BFGS-B" finite values are required, so we subtract a value of 0.1
+optim_LBFGSB = optim(rec_start - 0.1, fn = bup_sq, n = n, Gp = Gp, V = room_volume, C0 = C0, C1 = C1, delta_t = delta_t, Cr = envCO2, method = "L-BFGS-B", lower = 1e-10, upper = 100)
+
+optimize_output = optimize(bup_sq, c(1e-10,100),  n = n, Gp = Gp, V = room_volume, C0 = C0, C1 = C1, delta_t = delta_t, Cr = envCO2)
+
+
+#Lets change the lower bound to 1
+
+optim_brent_1 = optim(rec_start, fn = bup_sq, n = n, Gp = Gp, V = room_volume, C0 = C0, C1 = C1, delta_t = delta_t, Cr = envCO2, method = 'Brent', lower = 1, upper = 100)
+
+optim_LBFGSB_1 = optim(rec_start - 0.1, fn = bup_sq, n = n, Gp = Gp, V = room_volume, C0 = C0, C1 = C1, delta_t = delta_t, Cr = envCO2, method = "L-BFGS-B", lower = 1, upper = 100)
+
+optimize_output_1 = optimize(bup_sq, c(1,100),  n = n, Gp = Gp, V = room_volume, C0 = C0, C1 = C1, delta_t = delta_t, Cr = envCO2)
+
+
+#lets build a data frame to display our output
+
+optim_df = data.frame(Method = c("optim : Brent", "optim : L-BFGS-B", "optimize"),
+                      `Lower Bound of 1e-10` = c(optim_brent$par, optim_LBFGSB$par, optimize_output$minimum),
+                      `Lower Bound of 1` = c(optim_brent_1$par, optim_LBFGSB_1$par, optimize_output_1$minimum),
+                      `LB1 difference from EVCO2 estimate` = c(optim_brent_1$par, optim_LBFGSB_1$par, optimize_output_1$minimum) - aer_est)
+
+colnames(optim_df) = c("Method","Lower Bound of 1e-10","Lower Bound of 1", "LB1 difference from EVCO2 estimate")
+
+optim_df
+
+
+```
+
+
+
+
+
